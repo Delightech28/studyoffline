@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
+import { extractPdfText } from "@/lib/pdfExtract";
 import {
   saveNote, getAllNotes, saveNoteResult, getNoteResult, deleteNote,
   type StoredNote, type NoteResult,
@@ -56,23 +57,6 @@ export default function UploadPage() {
     getAllNotes().then(setSavedNotes).catch(console.error);
   }, [state.note]);
 
-  // ── PDF extraction (client-side, no internet needed) ──────────────────────
-  const extractPdfText = async (file: File): Promise<string> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const uint8 = new Uint8Array(arrayBuffer);
-    // pdf-parse must run server-side; we send raw bytes to an extraction endpoint
-    // Use a lightweight approach: read as base64 and send to /api/extract-pdf
-    const base64 = btoa(String.fromCharCode(...uint8));
-    const res = await fetch("/api/extract-pdf", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ base64, filename: file.name }),
-    });
-    if (!res.ok) throw new Error("Failed to extract PDF text");
-    const { text } = await res.json();
-    return text as string;
-  };
-
   // ── Process a file ─────────────────────────────────────────────────────────
   const processFile = useCallback(async (file: File) => {
     if (!file.name.toLowerCase().endsWith(".pdf")) {
@@ -82,9 +66,9 @@ export default function UploadPage() {
     setState((s) => ({ ...s, loading: true, loadingStage: "Reading your notes…", error: null, fromCache: false, result: null }));
 
     try {
-      // 1. Extract text (client-side parse via server route, no AI needed)
+      // 1. Extract text client-side (no server, no internet needed)
       setState((s) => ({ ...s, loadingStage: "Extracting text from PDF…" }));
-      const content = await extractPdfText(file);
+      const { text: content } = await extractPdfText(file);
 
       // 2. Save raw note to IndexedDB immediately
       const noteId = crypto.randomUUID();

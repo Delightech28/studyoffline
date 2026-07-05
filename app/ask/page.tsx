@@ -319,10 +319,7 @@ export default function AskPage() {
           </div>
 
           {/* Footer meta */}
-          <div className="flex items-center justify-between">
-            <p className="text-[10px] text-slate-400">
-              Powered by Gemma 4 · Answers cached in your browser
-            </p>
+          <div className="flex items-center justify-end">
             <div className="flex items-center gap-3">
               {messages.length > 0 && (
                 <Badge variant="secondary">
