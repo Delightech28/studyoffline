@@ -1,67 +1,41 @@
 import { NextRequest, NextResponse } from "next/server";
-
-const API_KEY   = process.env.GEMMA_API_KEY ?? "";
-const MODEL     = "gemma-4-31b-it";
-const API_URL   = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${API_KEY}`;
+import { callGemma } from "@/lib/gemma";
 
 export async function POST(req: NextRequest) {
   try {
     const { question, context } = (await req.json()) as {
       question: string;
-      context?: string; // optional note/PDF text
+      context?: string;
     };
 
     if (!question?.trim()) {
       return NextResponse.json({ error: "Question is required." }, { status: 400 });
     }
 
-    if (!API_KEY) {
+    if (!process.env.GEMMA_API_KEY) {
       return NextResponse.json({ error: "API key not configured." }, { status: 500 });
     }
 
-    // Build the prompt
-    const systemParts = [
-      "You are StudyOffline, an AI study companion for university students.",
-      "Give clear, concise explanations suitable for students.",
-      "Use simple language, examples where helpful, and structure your answer with headings if it's long.",
-      "Keep answers focused and educational.",
-    ].join(" ");
-
     const userText = context
-      ? `Context from lecture notes:\n\n${context.slice(0, 8000)}\n\nStudent question: ${question}`
+      ? `Context from lecture notes:\n\n${context.slice(0, 4000)}\n\nStudent question: ${question}`
       : question;
 
-    const body = {
-      system_instruction: { parts: [{ text: systemParts }] },
-      contents: [{ role: "user", parts: [{ text: userText }] }],
-      generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 1024,
-      },
-    };
-
-    const res = await fetch(API_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+    const answer = await callGemma(userText, {
+      maxOutputTokens: 1024,
+      temperature: 0.7,
+      systemPrompt:
+        "You are StudyOffline, an AI study companion for university students. " +
+        "Give clear, concise explanations in simple language. " +
+        "Use examples where helpful. Structure long answers with headings. " +
+        "Only provide the final answer — never show reasoning or thinking.",
     });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      console.error("Gemma API error:", errText);
-      return NextResponse.json(
-        { error: `AI API error: ${res.status}` },
-        { status: res.status }
-      );
-    }
-
-    const data = await res.json();
-    const answer: string =
-      data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "No response from AI.";
 
     return NextResponse.json({ answer });
   } catch (err) {
     console.error("Ask route error:", err);
-    return NextResponse.json({ error: "Internal server error." }, { status: 500 });
+    return NextResponse.json(
+      { error: err instanceof Error ? err.message : "Internal server error." },
+      { status: 500 }
+    );
   }
 }
