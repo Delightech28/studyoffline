@@ -13,7 +13,6 @@ export async function POST(req: NextRequest) {
 
     const buffer = Buffer.from(base64, "base64");
 
-    // Quick sanity check — all PDFs start with %PDF
     if (!buffer.slice(0, 5).toString("ascii").startsWith("%PDF")) {
       return NextResponse.json(
         { error: "File does not appear to be a valid PDF." },
@@ -21,11 +20,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Dynamic import so Turbopack never tries to statically bundle pdfjs-dist
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const pdfjsLib = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as any;
+    // Use the package root — pdfjs-dist exports getDocument + GlobalWorkerOptions
+    // We cast to any to avoid deep-import type issues across environments
+    // @ts-expect-error — pdfjs-dist types vary by build target
+    const pdfjsLib = await import("pdfjs-dist");
 
-    // Disable worker — running server-side, no WorkerGlobalScope available
+    // Disable worker — server-side, no WorkerGlobalScope
     pdfjsLib.GlobalWorkerOptions.workerSrc = "";
 
     const data = new Uint8Array(buffer);
@@ -47,21 +47,25 @@ export async function POST(req: NextRequest) {
       const page = await pdf.getPage(pageNum);
       const content = await page.getTextContent();
 
-      // Join items — insert space between items, newline between blocks
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const lines: string[] = [];
       let currentLine = "";
       let lastY: number | null = null;
 
-      for (const item of content.items as Array<{ str: string; transform: number[]; hasEOL?: boolean }>) {
+      for (const item of content.items as Array<{
+        str: string;
+        transform: number[];
+        hasEOL?: boolean;
+      }>) {
         const y = item.transform?.[5] ?? null;
 
         if (lastY !== null && y !== null && Math.abs(y - lastY) > 2) {
-          // New line detected by vertical position change
           if (currentLine.trim()) lines.push(currentLine.trim());
           currentLine = item.str;
         } else {
-          currentLine += (currentLine && item.str && !currentLine.endsWith(" ") ? " " : "") + item.str;
+          currentLine +=
+            currentLine && item.str && !currentLine.endsWith(" ")
+              ? " " + item.str
+              : item.str;
         }
 
         if (item.hasEOL) {
@@ -72,7 +76,6 @@ export async function POST(req: NextRequest) {
         lastY = y;
       }
       if (currentLine.trim()) lines.push(currentLine.trim());
-
       pageTexts.push(lines.join("\n"));
     }
 
