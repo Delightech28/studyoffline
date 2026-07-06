@@ -3,9 +3,6 @@
   "buildCommand": "pnpm run build",
   "devCommand": "pnpm run dev",
   "installCommand": "pnpm install",
-  "env": {
-    "GEMMA_API_KEY": "@gemma_api_key"
-  },
   "functions": {
     "app/api/ask/route.ts": {
       "maxDuration": 30
