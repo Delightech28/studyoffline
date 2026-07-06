@@ -7,7 +7,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import ChatMessage from "@/components/chat/ChatMessage";
 import TypingIndicator from "@/components/chat/TypingIndicator";
-import SuggestionChips from "@/components/chat/SuggestionChips";
 import AppNavbar from "@/components/AppNavbar";
 import {
   findCachedAnswer,
@@ -260,17 +259,6 @@ export default function AskPage() {
       ════════════════════════════════════════ */}
       <footer className="flex-shrink-0 bg-white/95 backdrop-blur-md border-t border-slate-100 shadow-[0_-8px_32px_rgba(0,0,0,0.06)]">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 py-4 flex flex-col gap-3">
-
-          {/* Suggestion chips — only when conversation is empty */}
-          {messages.length === 0 && (
-            <SuggestionChips
-              onSelect={(text) => {
-                setInput(text);
-                textareaRef.current?.focus();
-              }}
-              disabled={isLoading}
-            />
-          )}
 
           {/* Input row */}
           <div className="flex items-end gap-2.5">
