@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge";
 import ChatMessage from "@/components/chat/ChatMessage";
 import TypingIndicator from "@/components/chat/TypingIndicator";
 import AppNavbar from "@/components/AppNavbar";
+import OfflineToggle from "@/components/OfflineToggle";
+import { useOnlineStatus } from "@/lib/offlineSimulator";
 import {
   findCachedAnswer,
   saveChat,
@@ -29,8 +31,8 @@ export default function AskPage() {
   const [messages, setMessages]         = useState<Message[]>([]);
   const [input, setInput]               = useState("");
   const [isLoading, setIsLoading]       = useState(false);
-  const [isOnline, setIsOnline]         = useState(true);
   const [notification, setNotification] = useState<string | null>(null);
+  const { isOnline }                    = useOnlineStatus();
 
   const bottomRef     = useRef<HTMLDivElement>(null);
   const textareaRef   = useRef<HTMLTextAreaElement>(null);
@@ -41,17 +43,11 @@ export default function AskPage() {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading]);
 
-  // ── Online / offline ───────────────────────────────────────────────────────
+  // ── Online / offline — handled by OfflineProvider context ────────────────
   useEffect(() => {
-    setIsOnline(navigator.onLine);
-    const handleOnline  = () => { setIsOnline(true);  processPendingQueue(); };
-    const handleOffline = () => setIsOnline(false);
-    window.addEventListener("online",  handleOnline);
-    window.addEventListener("offline", handleOffline);
-    return () => {
-      window.removeEventListener("online",  handleOnline);
-      window.removeEventListener("offline", handleOffline);
-    };
+    const handleOnline = () => processPendingQueue();
+    window.addEventListener("online", handleOnline);
+    return () => window.removeEventListener("online", handleOnline);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -104,7 +100,7 @@ export default function AskPage() {
     }
 
     // 2 — offline, no cache
-    if (!navigator.onLine) {
+    if (!isOnline) {
       await enqueuePending({ id: crypto.randomUUID(), question: trimmed, timestamp: Date.now() });
       setMessages((prev) => [
         ...prev,
@@ -170,6 +166,7 @@ export default function AskPage() {
     <div className="flex flex-col h-screen overflow-hidden">
 
       <AppNavbar title="Ask StudyOffline" notification={notification} />
+      <OfflineToggle />
 
       {/* ════════════════════════════════════════
           MESSAGES AREA

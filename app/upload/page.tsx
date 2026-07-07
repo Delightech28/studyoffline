@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Card, CardContent } from "@/components/ui/card";
 import { extractPdfText } from "@/lib/pdfExtract";
+import { useOnlineStatus } from "@/lib/offlineSimulator";
+import OfflineToggle from "@/components/OfflineToggle";
 import {
   saveNote, getAllNotes, saveNoteResult, getNoteResult, deleteNote,
   type StoredNote, type NoteResult,
@@ -26,7 +28,7 @@ interface PageState {
 }
 
 export default function UploadPage() {
-  const [isOnline, setIsOnline]         = useState(true);
+  const { isOnline }                    = useOnlineStatus();
   const [notification, setNotification] = useState<string | null>(null);
   const [isDragging, setIsDragging]     = useState(false);
   const [savedNotes, setSavedNotes]     = useState<StoredNote[]>([]);
@@ -40,16 +42,6 @@ export default function UploadPage() {
   const notify = useCallback((msg: string, duration = 5000) => {
     setNotification(msg);
     setTimeout(() => setNotification(null), duration);
-  }, []);
-
-  // ── Online / offline ───────────────────────────────────────────────────────
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-    const on  = () => { setIsOnline(true); };
-    const off = () => setIsOnline(false);
-    window.addEventListener("online", on);
-    window.addEventListener("offline", off);
-    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
   }, []);
 
   // ── Load saved notes list ──────────────────────────────────────────────────
@@ -78,7 +70,7 @@ export default function UploadPage() {
       setState((s) => ({ ...s, note, loadingStage: "Sending to Gemma AI…" }));
 
       // 3. Offline — queue AI processing
-      if (!navigator.onLine) {
+      if (!isOnline) {
         setState((s) => ({
           ...s, note, loading: false,
           error: "You're offline — AI summary will generate once you're back online. Your notes are saved.",
@@ -120,7 +112,7 @@ export default function UploadPage() {
       const result = await getNoteResult(note.id);
       if (result) {
         setState((s) => ({ ...s, note, result: { ...result, source: "cache" }, loading: false, loadingStage: "", fromCache: true }));
-      } else if (!navigator.onLine) {
+      } else if (!isOnline) {
         setState((s) => ({ ...s, note, result: null, loading: false, error: "You're offline — no cached AI results for this note yet." }));
       } else {
         // Have raw text, re-process with AI
@@ -168,6 +160,7 @@ export default function UploadPage() {
   return (
     <div className="flex flex-col min-h-screen bg-slate-50">
       <AppNavbar title="Upload Notes" notification={notification} />
+      <OfflineToggle />
 
       <main className="flex-1 no-scrollbar">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col gap-10">

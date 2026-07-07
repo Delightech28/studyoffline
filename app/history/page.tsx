@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import AppNavbar from "@/components/AppNavbar";
+import OfflineToggle from "@/components/OfflineToggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -88,6 +89,7 @@ export default function HistoryPage() {
   return (
     <div className="flex flex-col min-h-screen bg-slate-50 no-scrollbar">
       <AppNavbar title="History" />
+      <OfflineToggle />
 
       <main className="flex-1">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col gap-8">

@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState, useEffect } from "react";
+import { useState } from "react";
+import { useOnlineStatus } from "@/lib/offlineSimulator";
 
 interface AppNavbarProps {
   title: string;
@@ -10,18 +11,9 @@ interface AppNavbarProps {
 }
 
 export default function AppNavbar({ title, notification }: AppNavbarProps) {
-  const [isOnline, setIsOnline]         = useState(true);
+  const { isOnline } = useOnlineStatus();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
-
-  useEffect(() => {
-    setIsOnline(navigator.onLine);
-    const on  = () => setIsOnline(true);
-    const off = () => setIsOnline(false);
-    window.addEventListener("online",  on);
-    window.addEventListener("offline", off);
-    return () => { window.removeEventListener("online", on); window.removeEventListener("offline", off); };
-  }, []);
 
   const navLinks = [
     { href: "/ask",     label: "Ask AI" },

@@ -1,0 +1,46 @@
+{
+  "name": "StudyOffline",
+  "short_name": "StudyOffline",
+  "description": "AI-powered study companion for university students — works offline.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icons/icon-192",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512",
+      "sizes": "512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "screenshots": [],
+  "categories": ["education", "productivity"],
+  "shortcuts": [
+    {
+      "name": "Ask a Question",
+      "short_name": "Ask",
+      "url": "/ask",
+      "description": "Open the AI chat"
+    },
+    {
+      "name": "Upload Notes",
+      "short_name": "Upload",
+      "url": "/upload",
+      "description": "Upload and process lecture notes"
+    },
+    {
+      "name": "View History",
+      "short_name": "History",
+      "url": "/history",
+      "description": "Browse cached Q&As and notes"
+    }
+  ]
+}
