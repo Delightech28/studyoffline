@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { callGemma } from "@/lib/gemma";
 
+export const maxDuration = 60; // Vercel Pro allows up to 300s; on Hobby this is capped at 10s
+
 export async function POST(req: NextRequest) {
   try {
     const { content, filename } = (await req.json()) as {
@@ -15,52 +17,43 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "API key not configured." }, { status: 500 });
     }
 
-    // Keep context short to avoid Gemma internal errors
-    const text = content.slice(0, 4000);
-    const opts = { maxOutputTokens: 900, temperature: 0.4 };
+    // Short context + parallel calls — must complete within Vercel's timeout
+    const text = content.slice(0, 3000);
+    const opts = { maxOutputTokens: 600, temperature: 0.4 };
 
-    // Sequential calls — avoids hammering the API simultaneously
-    const summaryRaw = await callGemma(
-      `Lecture notes from "${filename}":\n\n${text}\n\n` +
-      `Write a clear, student-friendly summary in 3-5 short paragraphs. Plain language only.`,
-      opts
-    );
+    // Run all 3 in parallel — 3x faster than sequential
+    const [summaryRaw, conceptsRaw, questionsRaw] = await Promise.all([
+      callGemma(
+        `Notes from "${filename}":\n\n${text}\n\nSummarise in 2-3 short paragraphs. Plain language.`,
+        opts
+      ),
+      callGemma(
+        `Notes from "${filename}":\n\n${text}\n\nList 5-8 key concepts, one per line starting with "- ". No headers.`,
+        opts
+      ),
+      callGemma(
+        `Notes from "${filename}":\n\n${text}\n\nWrite 3 practice questions. Format exactly:\nQ: [question]\nA: [answer]\n\nRepeat for all 3.`,
+        opts
+      ),
+    ]);
 
-    const conceptsRaw = await callGemma(
-      `Lecture notes from "${filename}":\n\n${text}\n\n` +
-      `List the 6-10 most important key concepts. ` +
-      `Return ONLY a plain list, one item per line, each starting with "- ". No headers or extra text.`,
-      opts
-    );
-
-    const questionsRaw = await callGemma(
-      `Lecture notes from "${filename}":\n\n${text}\n\n` +
-      `Generate exactly 4 practice questions with answers. ` +
-      `Use this exact format for each:\nQ: [question]\nA: [answer]\n\n` +
-      `Output only the Q/A pairs, nothing else.`,
-      opts
-    );
-
-    // ── Parse concepts ────────────────────────────────────────────────────────
+    // Parse concepts
     const concepts = conceptsRaw
       .split("\n")
       .map((l) => l.replace(/^[-•*\d.]+\s*/, "").trim())
       .filter((l) => l.length > 3)
-      .slice(0, 10);
+      .slice(0, 8);
 
-    // ── Parse Q&A pairs ───────────────────────────────────────────────────────
+    // Parse Q&A
     const questions: { q: string; a: string }[] = [];
-
-    const qaBlocks = questionsRaw.split(/\n\s*\n/).filter(Boolean);
-    for (const block of qaBlocks) {
-      const qMatch = block.match(/Q:\s*(.+)/i);
-      const aMatch = block.match(/A:\s*([\s\S]+)/i);
-      if (qMatch && aMatch) {
-        questions.push({ q: qMatch[1].trim(), a: aMatch[1].trim() });
-      }
+    const blocks = questionsRaw.split(/\n\s*\n/).filter(Boolean);
+    for (const block of blocks) {
+      const q = block.match(/Q:\s*(.+)/i)?.[1]?.trim();
+      const a = block.match(/A:\s*([\s\S]+)/i)?.[1]?.trim();
+      if (q && a) questions.push({ q, a });
     }
 
-    // Fallback line-by-line parsing
+    // Fallback line-by-line parser
     if (questions.length === 0) {
       const lines = questionsRaw.split("\n").map((l) => l.trim()).filter(Boolean);
       let cur: { q?: string; a?: string } = {};
@@ -78,9 +71,9 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      summary:   summaryRaw.trim(),
+      summary: summaryRaw.trim(),
       concepts,
-      questions: questions.slice(0, 5),
+      questions: questions.slice(0, 4),
     });
   } catch (err) {
     console.error("process-note error:", err);

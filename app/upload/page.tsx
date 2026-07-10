@@ -86,7 +86,20 @@ export default function UploadPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ content, filename: file.name }),
       });
-      if (!res.ok) { const d = await res.json(); throw new Error(d.error ?? "AI error"); }
+      if (!res.ok) {
+        // Handle non-JSON responses (504 timeout returns plain text/HTML)
+        const contentType = res.headers.get("content-type") ?? "";
+        if (contentType.includes("application/json")) {
+          const d = await res.json();
+          throw new Error(d.error ?? `AI error (${res.status})`);
+        } else {
+          throw new Error(
+            res.status === 504
+              ? "Request timed out — the AI took too long. Try a shorter document or try again."
+              : `Server error (${res.status}). Please try again.`
+          );
+        }
+      }
       const { summary, concepts, questions } = await res.json();
 
       const noteResult: NoteResult = {
