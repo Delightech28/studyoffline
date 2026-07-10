@@ -2,15 +2,15 @@
  * StudyOffline Service Worker
  *
  * Strategy:
- *  - App shell (pages, JS, CSS, fonts): Cache-first with network fallback
- *  - API routes (/api/*): Network-first, no caching (handled by IndexedDB instead)
- *  - Static assets (images, icons): Cache-first, long-lived
- *  - Navigation requests: Serve cached shell, let Next.js hydrate
+ *  - On install: cache the main page shells
+ *  - On fetch: cache ALL /_next/static/ chunks as they are requested (network-first, then cache)
+ *  - API routes (/api/*): network only — IndexedDB handles AI response caching
+ *  - Everything else: cache-first with network fallback
  */
 
-const CACHE_NAME = "studyoffline-v1";
+const CACHE_NAME = "studyoffline-v2";
 
-// Assets to pre-cache on install (app shell)
+// Core app shell to pre-cache on install
 const PRECACHE_URLS = [
   "/",
   "/ask",
@@ -20,93 +20,98 @@ const PRECACHE_URLS = [
   "/pdf.worker.min.mjs",
 ];
 
-// ── Install: pre-cache the app shell ─────────────────────────────────────────
+// ── Install ───────────────────────────────────────────────────────────────────
 self.addEventListener("install", (event) => {
   event.waitUntil(
     caches
       .open(CACHE_NAME)
-      .then((cache) => cache.addAll(PRECACHE_URLS))
-      .then(() => self.skipWaiting()) // Activate immediately
+      .then((cache) => {
+        // Pre-cache shell pages — ignore failures on individual items
+        return Promise.allSettled(
+          PRECACHE_URLS.map((url) =>
+            cache.add(url).catch((e) => console.warn("[SW] Failed to precache:", url, e))
+          )
+        );
+      })
+      .then(() => self.skipWaiting())
   );
 });
 
-// ── Activate: clean up old caches ─────────────────────────────────────────────
+// ── Activate: clean old caches ────────────────────────────────────────────────
 self.addEventListener("activate", (event) => {
   event.waitUntil(
     caches
       .keys()
       .then((keys) =>
         Promise.all(
-          keys
-            .filter((key) => key !== CACHE_NAME)
-            .map((key) => caches.delete(key))
+          keys.filter((k) => k !== CACHE_NAME).map((k) => caches.delete(k))
         )
       )
-      .then(() => self.clients.claim()) // Take control of all open tabs
+      .then(() => self.clients.claim())
   );
 });
 
-// ── Fetch: routing strategy ───────────────────────────────────────────────────
+// ── Fetch ─────────────────────────────────────────────────────────────────────
 self.addEventListener("fetch", (event) => {
   const { request } = event;
   const url = new URL(request.url);
 
-  // Skip non-GET requests and cross-origin requests
-  if (request.method !== "GET" || url.origin !== self.location.origin) {
-    return;
-  }
+  // Only handle GET requests from our own origin
+  if (request.method !== "GET" || url.origin !== self.location.origin) return;
 
-  // API routes — network only, no caching (responses go to IndexedDB via the app)
+  // API routes — always network, never cache
   if (url.pathname.startsWith("/api/")) {
     event.respondWith(fetch(request));
     return;
   }
 
-  // Next.js internal routes — network only
+  // Next.js static chunks — cache aggressively as they load
+  // These have content hashes in filenames so they're safe to cache forever
+  if (url.pathname.startsWith("/_next/static/")) {
+    event.respondWith(cacheFirstThenNetwork(request));
+    return;
+  }
+
+  // Next.js data/image routes — network first, cache as fallback
   if (url.pathname.startsWith("/_next/")) {
     event.respondWith(networkFirstThenCache(request));
     return;
   }
 
-  // Everything else — cache first, network fallback
+  // All other requests (pages, icons, pdf worker) — cache first
   event.respondWith(cacheFirstThenNetwork(request));
 });
 
-// ── Strategies ────────────────────────────────────────────────────────────────
-
-/**
- * Cache-first: serve from cache if available, otherwise fetch and cache.
- * Best for app shell pages and static assets.
- */
+// ── Cache-first strategy ──────────────────────────────────────────────────────
 async function cacheFirstThenNetwork(request) {
   const cached = await caches.match(request);
   if (cached) return cached;
 
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    if (response.ok && response.status < 400) {
       const cache = await caches.open(CACHE_NAME);
       cache.put(request, response.clone());
     }
     return response;
   } catch {
-    // If both cache and network fail, return the offline fallback page
-    const fallback = await caches.match("/");
-    return fallback || new Response("Offline — please visit the app once while online to enable offline access.", {
-      status: 503,
-      headers: { "Content-Type": "text/plain" },
-    });
+    // Offline fallback — serve the cached home page for navigation requests
+    if (request.mode === "navigate") {
+      const fallback = await caches.match("/");
+      if (fallback) return fallback;
+    }
+    return new Response(
+      JSON.stringify({ error: "You are offline and this resource is not cached yet." }),
+      { status: 503, headers: { "Content-Type": "application/json" } }
+    );
   }
 }
 
-/**
- * Network-first: try network, fall back to cache.
- * Best for Next.js JS chunks that update frequently.
- */
+// ── Network-first strategy ────────────────────────────────────────────────────
 async function networkFirstThenCache(request) {
   try {
     const response = await fetch(request);
-    if (response.ok) {
+    if (response.ok && response.status < 400) {
       const cache = await caches.open(CACHE_NAME);
       cache.put(request, response.clone());
     }
