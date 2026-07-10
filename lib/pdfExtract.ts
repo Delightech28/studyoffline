@@ -9,8 +9,8 @@ export async function extractPdfText(
 ): Promise<{ text: string; pages: number }> {
   const pdfjsLib = await import("pdfjs-dist");
 
-  // Use the locally served worker from /public — cached by service worker, works offline
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "/pdf.worker.min.mjs";
+  // Use unpkg CDN for the exact matching version — avoids version mismatch
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
   const arrayBuffer = await file.arrayBuffer();
   const data = new Uint8Array(arrayBuffer);
